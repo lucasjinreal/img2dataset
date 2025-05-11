@@ -25,7 +25,7 @@ import sys
 import signal
 import os
 from loguru import logger
-from .export import export
+from .export import clean, export
 
 logging.getLogger("exifread").setLevel(level=logging.CRITICAL)
 
@@ -537,8 +537,21 @@ def parse_args():
         choices=["llava", "alpaca", "vicuna"],
         help="Which mllmdata export format to use",
     )
-    # any other export‐specific flags can go here…
+    export_parser.add_argument(
+        "--clean",
+        action="store_true",
+    )
 
+    clean_parser = subparsers.add_parser(
+        "clean",
+        help="Clean dataset in mllmdata format",
+        description="Clean your_dataset/ into a supported 'mllmdata' format",
+    )
+    clean_parser.add_argument(
+        "dataset_path",
+        type=str,
+        help="Path to the dataset directory (e.g. your_dataset/)",
+    )
     return parser.parse_args()
 
 
@@ -550,7 +563,9 @@ def main():
         download(**vars(args))
     elif args.command == "export":
         # you'll implement export(dataset_path, fmt, **maybe_other_args)
-        export(args.dataset_path, fmt=args.format)
+        export(args.dataset_path, fmt=args.format, clean_files=args.clean)
+    elif args.command == "clean":
+        clean(args.dataset_path)
     else:
         # argparse’s `required=True` on subparsers should prevent this
         raise RuntimeError(f"Unknown command: {args.command}")

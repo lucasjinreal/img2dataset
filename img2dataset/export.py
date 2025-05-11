@@ -29,22 +29,7 @@ def export(dataset_path: str, fmt: str, clean_files: bool = False):
         raise ValueError(f"Dataset path '{dataset_path}' is not a directory")
 
     logger.info(f"start export dataset {dataset_path} to {fmt} format")
-    # Cleanup old root-level .txt and .parquet files (e.g., input lists)
-    if clean_files:
-        logger.info("cleanup old root-level.txt and.parquet files (e.g., input lists)")
-        confirm = input(
-            "Are you sure you want to delete all .txt files under the data directory? (y/n): "
-        )
-        if confirm.lower() == "yes" or confirm.lower() == "y":
-            for file in ds.rglob("*.txt"):
-                if file.is_file():
-                    try:
-                        file.unlink()
-                        # print(f"Removed: {file}")
-                    except Exception as e:
-                        logger.warning(f"Warning: failed to remove {file}: {e}")
-        else:
-            print("Deletion canceled.")
+
     logger.info(f"start export to {fmt} format")
 
     if fmt == "llava":
@@ -88,3 +73,53 @@ def export(dataset_path: str, fmt: str, clean_files: bool = False):
 
     else:
         raise NotImplementedError(f"Export format '{fmt}' is not supported yet")
+
+    # Cleanup old root-level .txt and .parquet files (e.g., input lists)
+    if clean_files:
+        logger.info("cleanup old root-level.txt and.parquet files (e.g., input lists)")
+        confirm = input(
+            "Are you sure you want to delete all .txt files under the data directory? (y/n): "
+        )
+        if confirm.lower() == "yes" or confirm.lower() == "y":
+            for file in ds.rglob("*.txt"):
+                if file.is_file():
+                    try:
+                        file.unlink()
+                        # print(f"Removed: {file}")
+                    except Exception as e:
+                        logger.warning(f"Warning: failed to remove {file}: {e}")
+        else:
+            print("Deletion canceled.")
+    logger.info(f"export dataset {dataset_path} to {fmt} format finished!")
+
+
+def clean(dataset_path: str):
+
+    ds = Path(dataset_path)
+    if not ds.is_dir():
+        raise ValueError(f"Dataset path '{dataset_path}' is not a directory")
+    logger.info(
+        "cleanup old root-level .txt .json and.parquet files (e.g., input lists)"
+    )
+
+    json_files = ds.glob("*/*.json")
+    json_files = [f for f in json_files if f.name.split(".")[0].isdigit()]
+    txt_files = list(ds.rglob("*.txt"))
+
+    logger.info(f"found: {len(json_files)} json files, {len(txt_files)} txt files")
+    logger.info("start remove these files")
+
+    confirm = input(
+        "Are you sure you want to delete all .txt .json files under the data directory? (y/n): "
+    )
+    if confirm.lower() == "yes" or confirm.lower() == "y":
+
+        for file in txt_files + json_files:
+            if file.is_file():
+                try:
+                    file.unlink()
+                    # print(f"Removed: {file}")
+                except Exception as e:
+                    logger.warning(f"Warning: failed to remove {file}: {e}")
+    else:
+        print("Deletion canceled.")
