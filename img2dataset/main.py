@@ -1,7 +1,7 @@
 """Img2dataset"""
 
-from typing import List, Optional
-import fire
+import argparse
+from typing import List, Optional, Union
 import logging
 from .logger import LoggerProcess
 from .resizer import Resizer
@@ -24,6 +24,8 @@ import fsspec
 import sys
 import signal
 import os
+from loguru import logger
+from .export import export
 
 logging.getLogger("exifread").setLevel(level=logging.CRITICAL)
 
@@ -71,7 +73,7 @@ def arguments_validator(params):
 
 
 def download(
-    url_list: str,
+    url_list: list[str] = [],
     image_size: int = 256,
     output_folder: str = "images",
     processes_count: int = 1,
@@ -124,10 +126,15 @@ def download(
             return os.path.abspath(p)
         return path
 
+    logger.info(f"request url files: {url_list}")
     output_folder = make_path_absolute(output_folder)
+    if isinstance(url_list, list):
+        url_list = url_list[0]
     url_list = make_path_absolute(url_list)
 
-    logger_process = LoggerProcess(output_folder, enable_wandb, wandb_project, config_parameters)
+    logger_process = LoggerProcess(
+        output_folder, enable_wandb, wandb_project, config_parameters
+    )
 
     tmp_path = output_folder + "/_tmp"
     fs, tmp_dir = fsspec.core.url_to_fs(tmp_path)
@@ -154,18 +161,25 @@ def download(
         done_shards = set()
     else:
         if incremental_mode == "incremental":
-            done_shards = set(int(x.split("/")[-1].split("_")[0]) for x in fs.glob(output_path + "/*.json"))
+            done_shards = set(
+                int(x.split("/")[-1].split("_")[0])
+                for x in fs.glob(output_path + "/*.json")
+                if x.split("/")[-1].split("_")[0].isdigit()
+            )
         elif incremental_mode == "overwrite":
             fs.rm(output_path, recursive=True)
             fs.mkdir(output_path)
             done_shards = set()
         elif incremental_mode == "extend":
-            existing_shards = [int(x.split("/")[-1].split("_")[0]) for x in fs.glob(output_path + "/*.json")]
+            existing_shards = [
+                int(x.split("/")[-1].split("_")[0])
+                for x in fs.glob(output_path + "/*.json")
+            ]
             start_shard_id = max(existing_shards, default=-1) + 1
             done_shards = set()
         else:
             raise ValueError(f"Unknown incremental mode {incremental_mode}")
-
+    logger.info(f"done_shards: {done_shards}")
     logger_process.done_shards = done_shards
     logger_process.start()
 
@@ -272,8 +286,274 @@ def download(
         fs.rm(tmp_dir, recursive=True)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Download images with img2dataset-style parameters, or export via mllmdata"
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    download_parser = subparsers.add_parser(
+        "download",
+        help="Download images using img2dataset-style parameters",
+        description="Download images using img2dataset-style parameters",
+    )
+    # copy & paste all your existing arguments onto download_parser:
+    download_parser.add_argument(
+        "--url_list",
+        nargs="+",
+        required=True,
+        help="List of URLs or file paths to process",
+    )
+    download_parser.add_argument(
+        "--image_size",
+        type=int,
+        default=256,
+        help="Resize image to this size (px)",
+    )
+    download_parser.add_argument(
+        "--output_folder",
+        type=str,
+        default="images",
+        help="Output directory",
+    )
+    download_parser.add_argument(
+        "--processes_count",
+        type=int,
+        default=1,
+        help="Number of parallel processes",
+    )
+    download_parser.add_argument(
+        "--resize_mode",
+        type=str,
+        default="border",
+        choices=["border", "center", "no"],
+        help="Resize strategy",
+    )
+    download_parser.add_argument(
+        "--resize_only_if_bigger",
+        action="store_true",
+        help="Only resize if image is larger than target",
+    )
+    download_parser.add_argument(
+        "--upscale_interpolation",
+        type=str,
+        default="lanczos",
+        help="Interpolation when upscaling",
+    )
+    download_parser.add_argument(
+        "--downscale_interpolation",
+        type=str,
+        default="area",
+        help="Interpolation when downscaling",
+    )
+    download_parser.add_argument(
+        "--encode_quality",
+        type=int,
+        default=95,
+        help="JPEG quality for encoding",
+    )
+    download_parser.add_argument(
+        "--encode_format",
+        type=str,
+        default="jpg",
+        choices=["jpg", "png", "webp"],
+        help="Image format for re-encoding",
+    )
+    download_parser.add_argument(
+        "--skip_reencode",
+        action="store_true",
+        help="Skip re-encoding if not needed",
+    )
+    download_parser.add_argument(
+        "--output_format",
+        type=str,
+        default="files",
+        choices=["files", "lmdb", "webdataset"],
+        help="How to store output",
+    )
+    download_parser.add_argument(
+        "--input_format",
+        type=str,
+        default="txt",
+        help="Format of input URL list (txt|parquet|json)",
+    )
+    download_parser.add_argument(
+        "--url_col",
+        type=str,
+        default="url",
+        help="Column name for URLs (in parquet/json)",
+    )
+    download_parser.add_argument(
+        "--caption_col",
+        type=str,
+        default=None,
+        help="Column name for captions",
+    )
+    download_parser.add_argument(
+        "--bbox_col",
+        type=str,
+        default=None,
+        help="Column name for bounding boxes",
+    )
+    download_parser.add_argument(
+        "--thread_count",
+        type=int,
+        default=256,
+        help="Threads per process",
+    )
+    download_parser.add_argument(
+        "--number_sample_per_shard",
+        type=int,
+        default=10000,
+        help="Samples per shard",
+    )
+    download_parser.add_argument(
+        "--extract_exif",
+        action="store_true",
+        help="Extract EXIF metadata",
+    )
+    download_parser.add_argument(
+        "--save_additional_columns",
+        nargs="+",
+        default=None,
+        help="List of extra dataframe columns to save",
+    )
+    download_parser.add_argument(
+        "--timeout",
+        type=int,
+        default=10,
+        help="Network timeout (s)",
+    )
+    download_parser.add_argument(
+        "--enable_wandb",
+        action="store_true",
+        help="Log runs to Weights & Biases",
+    )
+    download_parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default="img2dataset",
+        help="W&B project name",
+    )
+    download_parser.add_argument(
+        "--oom_shard_count",
+        type=int,
+        default=5,
+        help="Shards to split on OOM",
+    )
+    download_parser.add_argument(
+        "--compute_hash",
+        type=str,
+        default="sha256",
+        help="Hash algorithm (or none)",
+    )
+    download_parser.add_argument(
+        "--verify_hash",
+        nargs="+",
+        default=None,
+        help="List of hash algorithms to verify against",
+    )
+    download_parser.add_argument(
+        "--distributor",
+        type=str,
+        default="multiprocessing",
+        help="Job distribution backend",
+    )
+    download_parser.add_argument(
+        "--subjob_size",
+        type=int,
+        default=1000,
+        help="Work chunk size",
+    )
+    download_parser.add_argument(
+        "--retries",
+        type=int,
+        default=0,
+        help="Number of download retries",
+    )
+    download_parser.add_argument(
+        "--disable_all_reencoding",
+        action="store_true",
+        help="Turn off all re-encoding",
+    )
+    download_parser.add_argument(
+        "--min_image_size",
+        type=int,
+        default=0,
+        help="Minimum image dimension",
+    )
+    download_parser.add_argument(
+        "--max_image_area",
+        type=float,
+        default=float("inf"),
+        help="Max allowed image area",
+    )
+    download_parser.add_argument(
+        "--max_aspect_ratio",
+        type=float,
+        default=float("inf"),
+        help="Max width/height ratio",
+    )
+    download_parser.add_argument(
+        "--incremental_mode",
+        type=str,
+        default="incremental",
+        help="Mode for incremental runs",
+    )
+    download_parser.add_argument(
+        "--max_shard_retry",
+        type=int,
+        default=1,
+        help="Retries per shard on failure",
+    )
+    download_parser.add_argument(
+        "--user_agent_token",
+        type=str,
+        default=None,
+        help="Custom User-Agent header token",
+    )
+    download_parser.add_argument(
+        "--disallowed_header_directives",
+        nargs="+",
+        default=None,
+        help="HTTP header directives not to forward",
+    )
+
+    # ── “export” subcommand ───────────────────────────────────────────────────────
+    export_parser = subparsers.add_parser(
+        "export",
+        help="Export dataset in mllmdata format",
+        description="Export your_dataset/ into a supported 'mllmdata' format",
+    )
+    export_parser.add_argument(
+        "dataset_path",
+        type=str,
+        help="Path to the dataset directory (e.g. your_dataset/)",
+    )
+    export_parser.add_argument(
+        "--format",
+        type=str,
+        required=True,
+        choices=["llava", "alpaca", "vicuna"],
+        help="Which mllmdata export format to use",
+    )
+    # any other export‐specific flags can go here…
+
+    return parser.parse_args()
+
+
 def main():
-    fire.Fire(download)
+    args = parse_args()
+    if args.command == "download":
+        # all your existing flags live in args.__dict__
+        delattr(args, "command")
+        download(**vars(args))
+    elif args.command == "export":
+        # you'll implement export(dataset_path, fmt, **maybe_other_args)
+        export(args.dataset_path, fmt=args.format)
+    else:
+        # argparse’s `required=True` on subparsers should prevent this
+        raise RuntimeError(f"Unknown command: {args.command}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import webdataset as wds
+from loguru import logger
 
 
 class BufferedParquetWriter:
@@ -112,7 +113,9 @@ class WebDatasetSampleWriter:
         self.tar_fd = fs.open(f"{output_path}/{shard_name}.tar", "wb")
         self.tarwriter = wds.TarWriter(self.tar_fd)
         self.save_caption = save_caption
-        self.buffered_parquet_writer = BufferedParquetWriter(output_folder + "/" + shard_name + ".parquet", schema, 100)
+        self.buffered_parquet_writer = BufferedParquetWriter(
+            output_folder + "/" + shard_name + ".parquet", schema, 100
+        )
         self.encode_format = encode_format
 
     def write(self, img_str, key, caption, meta):
@@ -150,7 +153,9 @@ class TFRecordSampleWriter:
         try:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
             import tensorflow_io as _  # pylint: disable=import-outside-toplevel
-            from tensorflow.python.lib.io.tf_record import TFRecordWriter  # pylint: disable=import-outside-toplevel
+            from tensorflow.python.lib.io.tf_record import (
+                TFRecordWriter,
+            )  # pylint: disable=import-outside-toplevel
             from tensorflow.python.training.training import (  # pylint: disable=import-outside-toplevel
                 BytesList,
                 Example,
@@ -179,7 +184,9 @@ class TFRecordSampleWriter:
         self.shard_id = shard_id
         self.tf_writer = TFRecordWriter(f"{output_folder}/{shard_name}.tfrecord")
         self.save_caption = save_caption
-        self.buffered_parquet_writer = BufferedParquetWriter(output_folder + "/" + shard_name + ".parquet", schema, 100)
+        self.buffered_parquet_writer = BufferedParquetWriter(
+            output_folder + "/" + shard_name + ".parquet", schema, 100
+        )
         self.encode_format = encode_format
 
     def write(self, img_str, key, caption, meta):
@@ -190,7 +197,9 @@ class TFRecordSampleWriter:
                 self.encode_format: self._bytes_feature(img_str),
             }
             if self.save_caption:
-                sample["txt"] = self._bytes_feature(str(caption) if caption is not None else "")
+                sample["txt"] = self._bytes_feature(
+                    str(caption) if caption is not None else ""
+                )
             for k, v in meta.items():
                 sample[k] = self._feature(v)
             tf_example = self._Example(features=self._Features(feature=sample))
@@ -264,8 +273,13 @@ class FilesSampleWriter:
         if not self.fs.exists(self.subfolder):
             self.fs.mkdir(self.subfolder)
         self.save_caption = save_caption
-        self.buffered_parquet_writer = BufferedParquetWriter(output_folder + "/" + shard_name + ".parquet", schema, 100)
+        self.buffered_parquet_writer = BufferedParquetWriter(
+            output_folder + "/" + shard_name + ".parquet", schema, 100
+        )
         self.encode_format = encode_format
+        logger.info(
+            f"FilesSampleWriter: {self.subfolder}, captions will into shard temporory."
+        )
 
     def write(self, img_str, key, caption, meta):
         """Write sample to disk"""
@@ -280,13 +294,13 @@ class FilesSampleWriter:
                     f.write(str(caption))
 
             # some meta data may not be JSON serializable
-            for k, v in meta.items():
-                if isinstance(v, np.ndarray):
-                    meta[k] = v.tolist()
-            j = json.dumps(meta, indent=4)
-            meta_filename = f"{self.subfolder}/{key}.json"
-            with self.fs.open(meta_filename, "w") as f:
-                f.write(j)
+            # for k, v in meta.items():
+            #     if isinstance(v, np.ndarray):
+            #         meta[k] = v.tolist()
+            # j = json.dumps(meta, indent=4)
+            # meta_filename = f"{self.subfolder}/{key}.json"
+            # with self.fs.open(meta_filename, "w") as f:
+            #     f.write(j)
         self.buffered_parquet_writer.write(meta)
 
     def close(self):
@@ -296,7 +310,15 @@ class FilesSampleWriter:
 class DummySampleWriter:
     """Does not write"""
 
-    def __init__(self, shard_id, output_folder, save_caption, oom_shard_count, schema, encode_format):
+    def __init__(
+        self,
+        shard_id,
+        output_folder,
+        save_caption,
+        oom_shard_count,
+        schema,
+        encode_format,
+    ):
         pass
 
     def write(self, img_str, key, caption, meta):

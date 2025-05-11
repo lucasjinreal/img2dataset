@@ -14,3 +14,7 @@ wandb
 .pexing
 build
 .hypothesis
+dist/
+your_dataset/
+output/
+pixmo-cap/

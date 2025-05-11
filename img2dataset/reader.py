@@ -57,16 +57,35 @@ class Reader:
         self.tmp_path = tmp_path
 
         if fs.isdir(url_path):
-            self.input_files = sorted(fs.glob(url_path.rstrip("/") + "/*." + input_format))
+            self.input_files = sorted(
+                fs.glob(url_path.rstrip("/") + "/*." + input_format)
+                + fs.glob(url_path.rstrip("/") + "/*/*." + input_format)
+            )
             if len(self.input_files) == 0:
-                raise ValueError(f"No file found at path {url_path} with extension {input_format}")
+                raise ValueError(
+                    f"No file found at path {url_path} with extension {input_format}"
+                )
         else:
             self.input_files = [url_path]
 
         if self.input_format in ["txt", "txt.gz"]:
             self.column_list = ["url"]
-        elif self.input_format in ["json", "json.gz", "jsonl", "jsonl.gz", "csv", "csv.gz", "tsv", "tsv.gz", "parquet"]:
-            self.column_list = self.save_additional_columns if self.save_additional_columns is not None else []
+        elif self.input_format in [
+            "json",
+            "json.gz",
+            "jsonl",
+            "jsonl.gz",
+            "csv",
+            "csv.gz",
+            "tsv",
+            "tsv.gz",
+            "parquet",
+        ]:
+            self.column_list = (
+                self.save_additional_columns
+                if self.save_additional_columns is not None
+                else []
+            )
             if self.caption_col is not None:
                 self.column_list = self.column_list + ["caption"]
             if self.verify_hash_col is not None:
@@ -95,15 +114,21 @@ class Reader:
             compression = None
             if self.input_format.endswith(".gz"):
                 compression = "gzip"
-            with self.fs.open(input_file, encoding="utf-8", mode="rb", compression=compression) as file:
+            with self.fs.open(
+                input_file, encoding="utf-8", mode="rb", compression=compression
+            ) as file:
                 if self.input_format in ["txt", "txt.gz"]:
-                    df = csv_pa.read_csv(file, read_options=csv_pa.ReadOptions(column_names=["url"]))
+                    df = csv_pa.read_csv(
+                        file, read_options=csv_pa.ReadOptions(column_names=["url"])
+                    )
                 elif self.input_format in ["json", "json.gz"]:
                     df = pa.Table.from_pandas(pd.read_json(file))
                 elif self.input_format in ["csv", "csv.gz"]:
                     df = csv_pa.read_csv(file)
                 elif self.input_format in ["tsv", "tsv.gz"]:
-                    df = csv_pa.read_csv(file, parse_options=csv_pa.ParseOptions(delimiter="\t"))
+                    df = csv_pa.read_csv(
+                        file, parse_options=csv_pa.ParseOptions(delimiter="\t")
+                    )
                 elif self.input_format in ["jsonl", "jsonl.gz"]:
                     df = json_pa.read_json(file)
                 else:
@@ -123,10 +148,15 @@ class Reader:
 
         column_names = df.column_names
         if self.caption_col is not None:
-            column_names = [c if c != self.caption_col else "caption" for c in column_names]
+            column_names = [
+                c if c != self.caption_col else "caption" for c in column_names
+            ]
 
         if self.verify_hash_col is not None:
-            column_names = [c if c != self.verify_hash_col else self.verify_hash_type for c in column_names]
+            column_names = [
+                c if c != self.verify_hash_col else self.verify_hash_type
+                for c in column_names
+            ]
 
         column_names = [c if c != self.url_col else "url" for c in column_names]
 
@@ -146,8 +176,12 @@ class Reader:
         def write_shard(t):
             full_shard_id, shard_id = t
             begin_shard = shard_id * self.number_sample_per_shard
-            end_shard = min(number_samples, (1 + shard_id) * self.number_sample_per_shard)
-            df_shard = df.slice(begin_shard, end_shard - begin_shard).select(self.column_list)
+            end_shard = min(
+                number_samples, (1 + shard_id) * self.number_sample_per_shard
+            )
+            df_shard = df.slice(begin_shard, end_shard - begin_shard).select(
+                self.column_list
+            )
             tmp_file = self.tmp_path + f"/{full_shard_id}.feather"
             for i in range(10):
                 try:
@@ -170,7 +204,9 @@ class Reader:
             # thread pool to make it faster to write files to low latency file systems (ie s3, hdfs)
             try:
                 with ThreadPool(32) as thread_pool:
-                    for shard in thread_pool.imap_unordered(write_shard, shards_to_write):
+                    for shard in thread_pool.imap_unordered(
+                        write_shard, shards_to_write
+                    ):
                         shards.append(shard)
                 break
             except Exception as e:  # pylint: disable=broad-except
@@ -195,7 +231,14 @@ class Reader:
         """
         start_shard_id = self.start_shard_id
         for i, input_file in enumerate(self.input_files):
-            print("Sharding file number " + str(i + 1) + " of " + str(len(self.input_files)) + " called " + input_file)
+            print(
+                "Sharding file number "
+                + str(i + 1)
+                + " of "
+                + str(len(self.input_files))
+                + " called "
+                + input_file
+            )
 
             shards, number_shards = self._save_to_arrow(input_file, start_shard_id)
             print("File sharded in " + str(len(shards)) + " shards")
