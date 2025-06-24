@@ -17,7 +17,7 @@ if __name__ == "__main__":
         name="mllmdata",
         packages=find_packages(),
         include_package_data=True,
-        version="1.45.1",
+        version="1.45.2",
         license="MIT",
         description="Easily turn a set of image urls to an image dataset",
         long_description=long_description,
@@ -26,7 +26,7 @@ if __name__ == "__main__":
         author="Romain Beaumont",
         author_email="romain.rom1@gmail.com",
         url="https://github.com/lucasjinreal/img2dataset",
-        data_files=[(".", ["README.md"])],
+        data_files=[(".", ["README.md", "requirements.txt"])],
         keywords=["machine learning", "computer vision", "download", "image", "dataset"],
         install_requires=REQUIREMENTS,
         classifiers=[
