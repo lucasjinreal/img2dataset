@@ -11,6 +11,20 @@ import json
 import os
 from pathlib import Path
 from loguru import logger
+import random
+
+
+def random_image_description():
+    descriptions = [
+        "Describe the visual content of this image in detail.",
+        "Provide a thorough explanation of what is depicted in the picture.",
+        "Detail all visible elements and their arrangement in the image.",
+        "Explain everything you observe in this photograph comprehensively.",
+        "Give a complete breakdown of the visual elements present in this image.",
+        "Break down every visible component and their context in this photograph.",
+        "Characterize the entire visual scene represented in this image."
+    ]
+    return random.choice(descriptions)
 
 
 def export(dataset_path: str, fmt: str, clean_files: bool = False):
@@ -54,7 +68,7 @@ def export(dataset_path: str, fmt: str, clean_files: bool = False):
                     "conversations": [
                         {
                             "from": "human",
-                            "value": "Provide a detailed description of the image using both visual and caption cues. Expand with meaningful insights beyond the caption.",
+                            "value": "<image>\nProvide a detailed description of the image using both visual and caption cues.",
                         },
                         {
                             "from": "gpt",
